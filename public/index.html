@@ -134,6 +134,40 @@
   .mstat-lbl { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
   .mstat-val { font-size: 15px; font-family: var(--mono); color: var(--text); margin-top: 4px; }
   .tbl-wrap { max-height: 460px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+  /* ── Auth ── */
+  .auth-bar { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+  .role-badge { font-family: var(--mono); font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 1px solid; }
+  .role-badge.admin { color: var(--accent); border-color: rgba(245,166,35,0.3); background: rgba(245,166,35,0.08); }
+  .role-badge.viewer { color: var(--muted); border-color: var(--border); }
+  .auth-btn { font-family: var(--mono); font-size: 11px; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+  .auth-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Login modal */
+  .login-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; align-items: center; justify-content: center; }
+  .login-bg.open { display: flex; }
+  .login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; width: 100%; max-width: 360px; }
+  .login-logo { font-size: 32px; text-align: center; margin-bottom: 8px; }
+  .login-title { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 4px; }
+  .login-sub { font-size: 12px; color: var(--muted); text-align: center; font-family: var(--mono); margin-bottom: 24px; }
+  .login-input { width: 100%; padding: 11px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 14px; outline: none; margin-bottom: 12px; letter-spacing: 0.1em; }
+  .login-input:focus { border-color: var(--accent); }
+  .login-submit { width: 100%; padding: 11px; border: none; border-radius: 8px; background: var(--accent); color: #0d0f1a; font-family: var(--ui); font-size: 14px; font-weight: 800; cursor: pointer; transition: opacity 0.15s; }
+  .login-submit:hover { opacity: 0.85; }
+  .login-err { color: var(--red); font-size: 12px; font-family: var(--mono); text-align: center; margin-top: 8px; min-height: 18px; }
+  .login-skip { display: block; text-align: center; margin-top: 14px; font-size: 12px; color: var(--muted); font-family: var(--mono); cursor: pointer; }
+  .login-skip:hover { color: var(--text); }
+
+  /* View mode overlay on controls */
+  .ctrl-wrap { position: relative; }
+  .ctrl-mask { display: none; position: absolute; inset: 0; border-radius: 8px; background: rgba(13,15,26,0.6); backdrop-filter: blur(1px); z-index: 10; cursor: not-allowed; }
+  .view-mode .ctrl-mask { display: block; }
+  .view-mode .btn { opacity: 0.4; pointer-events: none; }
+  .view-mode select { opacity: 0.4; pointer-events: none; }
+  .view-mode input[type="number"] { opacity: 0.4; pointer-events: none; }
+  .view-mode input[type="time"]   { opacity: 0.4; pointer-events: none; }
+  .view-banner { display: none; background: rgba(90,97,128,0.12); border: 1px solid var(--border); color: var(--muted); padding: 8px 16px; border-radius: 8px; font-size: 12px; font-family: var(--mono); text-align: center; margin-bottom: 20px; }
+  .view-mode-active .view-banner { display: block; }
 </style>
 </head>
 <body>
@@ -145,6 +179,10 @@
     <span class="conn-lbl" id="connLbl">connecting...</span>
     <div class="conn-dot" id="connDot"></div>
     <span class="latency" id="latency"></span>
+    <div class="auth-bar">
+      <span class="role-badge viewer" id="roleBadge">👁 Viewer</span>
+      <button class="auth-btn" id="authBtn" onclick="openLogin()">Admin Login</button>
+    </div>
     <div class="rtc">
       <div class="rtc-time" id="rtcTime">--:--:--</div>
       <div class="rtc-date" id="rtcDate">--- -- ----</div>
@@ -153,7 +191,9 @@
 
   <div id="err"></div>
   <div id="stale"></div>
+  <div class="view-banner" id="viewBanner">👁 View mode — <span style="color:var(--text)">controls are disabled.</span> Click <b>Admin Login</b> to unlock.</div>
 
+  <div id="ctrlWrap" class="ctrl-wrap view-mode">
   <div class="grid">
 
     <!-- Temperature -->
@@ -251,6 +291,7 @@
     </div>
 
   </div>
+  </div><!-- end ctrl-wrap -->
 
   <!-- ── Chart + Log combined card ── -->
   <div class="hist-card">
@@ -273,6 +314,19 @@
     </div>
   </div>
 
+</div>
+
+<!-- ── Login Modal ── -->
+<div class="login-bg" id="loginModal">
+  <div class="login-box">
+    <div class="login-logo">🔐</div>
+    <div class="login-title">Admin Access</div>
+    <div class="login-sub">Enter password to unlock controls</div>
+    <input class="login-input" type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter')submitLogin()">
+    <button class="login-submit" onclick="submitLogin()">Unlock</button>
+    <div class="login-err" id="loginErr"></div>
+    <span class="login-skip" onclick="closeLogin()">Continue as viewer →</span>
+  </div>
 </div>
 
 <!-- ── Full History Modal ── -->
@@ -369,6 +423,7 @@ function applyTurnerPanels(isManual) {
 
 // ── SEND COMMAND ──────────────────────────────────────
 async function sendCommand(payload) {
+  if (!isAdmin) { openLogin(); return; }
   try {
     await fetch(`${API}/api/command`, {
       method: "POST",
@@ -714,6 +769,94 @@ function closeHistory() { $("historyModal").classList.remove("open"); }
 document.addEventListener("DOMContentLoaded", () => {
   $("historyModal").addEventListener("click", e => {
     if (e.target === $("historyModal")) closeHistory();
+  });
+});
+
+// ── AUTH ──────────────────────────────────────────────
+let isAdmin = false;
+
+function applyRole(admin) {
+  isAdmin = admin;
+  const wrap = document.getElementById("ctrlWrap");
+  const badge = document.getElementById("roleBadge");
+  const btn   = document.getElementById("authBtn");
+  const body  = document.getElementById("viewBannerWrap") || document.body;
+
+  if (admin) {
+    wrap.classList.remove("view-mode");
+    document.body.classList.remove("view-mode-active");
+    badge.className = "role-badge admin";
+    badge.textContent = "★ Admin";
+    btn.textContent = "Logout";
+    btn.onclick = logoutAdmin;
+    document.getElementById("viewBanner").style.display = "none";
+    sessionStorage.setItem("role", "admin");
+  } else {
+    wrap.classList.add("view-mode");
+    document.body.classList.add("view-mode-active");
+    badge.className = "role-badge viewer";
+    badge.textContent = "👁 Viewer";
+    btn.textContent = "Admin Login";
+    btn.onclick = openLogin;
+    document.getElementById("viewBanner").style.display = "block";
+    sessionStorage.removeItem("role");
+  }
+}
+
+function openLogin() {
+  document.getElementById("loginModal").classList.add("open");
+  document.getElementById("pwInput").value = "";
+  document.getElementById("loginErr").textContent = "";
+  setTimeout(() => document.getElementById("pwInput").focus(), 100);
+}
+
+function closeLogin() {
+  document.getElementById("loginModal").classList.remove("open");
+}
+
+async function submitLogin() {
+  const pw = document.getElementById("pwInput").value.trim();
+  if (!pw) return;
+  const btn = document.querySelector(".login-submit");
+  btn.textContent = "Checking...";
+  btn.style.opacity = "0.6";
+  try {
+    const r = await fetch(`${API}/api/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      applyRole(true);
+      closeLogin();
+    } else {
+      document.getElementById("loginErr").textContent = "Wrong password — try again";
+      document.getElementById("pwInput").value = "";
+      document.getElementById("pwInput").focus();
+    }
+  } catch (e) {
+    document.getElementById("loginErr").textContent = "Error: " + e.message;
+  }
+  btn.textContent = "Unlock";
+  btn.style.opacity = "1";
+}
+
+function logoutAdmin() {
+  applyRole(false);
+}
+
+// Restore session on reload
+if (sessionStorage.getItem("role") === "admin") {
+  document.addEventListener("DOMContentLoaded", () => applyRole(true));
+} else {
+  document.addEventListener("DOMContentLoaded", () => applyRole(false));
+}
+
+// Close login modal on backdrop click
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("loginModal").addEventListener("click", e => {
+    if (e.target === document.getElementById("loginModal")) closeLogin();
   });
 });
 
