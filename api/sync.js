@@ -1,55 +1,38 @@
-import { Redis } from "@upstash/redis";
+import { getRedis } from "./_redis.js";
 
-export const config = { runtime: "edge" };
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-const redis = Redis.fromEnv();
+  if (req.method === "OPTIONS") return res.status(200).end();
 
-export default async function handler(req) {
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json",
-  };
+  const redis = await getRedis();
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers });
-  }
-
-  // ── ESP32: POST sensor data, GET back any pending command ──
   if (req.method === "POST") {
-    const data = await req.json();
-
-    // Read pending command + save sensor data in parallel
-    const [cmd] = await Promise.all([
+    const data = req.body;
+    const [cmdRaw] = await Promise.all([
       redis.get("command"),
       redis.set("sensor", JSON.stringify({ ...data, updatedAt: Date.now() })),
     ]);
 
     let response = { ok: true, pending: false };
-
-    if (cmd) {
-      const cmdObj = typeof cmd === "string" ? JSON.parse(cmd) : cmd;
-      if (!cmdObj.done) {
-        // Mark done + return command atomically
-        cmdObj.done = true;
-        await redis.set("command", JSON.stringify(cmdObj));
-        response = { ok: true, pending: true, ...cmdObj };
+    if (cmdRaw) {
+      const cmd = JSON.parse(cmdRaw);
+      if (!cmd.done) {
+        cmd.done = true;
+        await redis.set("command", JSON.stringify(cmd));
+        response = { ok: true, pending: true, ...cmd };
       }
     }
-
-    return new Response(JSON.stringify(response), { status: 200, headers });
+    return res.status(200).json(response);
   }
 
-  // ── Dashboard: GET latest sensor data ──
   if (req.method === "GET") {
     const raw = await redis.get("sensor");
-    if (!raw) {
-      return new Response(JSON.stringify({ ok: false, message: "No data yet" }), { status: 200, headers });
-    }
-    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
-    return new Response(JSON.stringify(data), { status: 200, headers });
+    if (!raw) return res.status(200).json({ ok: false, message: "No data yet" });
+    return res.status(200).json(JSON.parse(raw));
   }
 
-  return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
+  return res.status(405).json({ error: "Method not allowed" });
 }

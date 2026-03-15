@@ -1,29 +1,22 @@
-export const config = { runtime: "edge" };
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-export default async function handler(req) {
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json",
-  };
-
-  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers });
+  if (req.method === "OPTIONS") return res.status(200).end();
 
   if (req.method === "POST") {
-    const { password } = await req.json();
+    const { password } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
     if (!adminPassword) {
-      return new Response(JSON.stringify({ ok: false, error: "ADMIN_PASSWORD not set in Vercel env vars" }), { status: 500, headers });
+      return res.status(500).json({ ok: false, error: "ADMIN_PASSWORD not set" });
     }
-
     if (password === adminPassword) {
-      return new Response(JSON.stringify({ ok: true, role: "admin" }), { status: 200, headers });
+      return res.status(200).json({ ok: true, role: "admin" });
     }
-
-    return new Response(JSON.stringify({ ok: false, error: "Wrong password" }), { status: 401, headers });
+    return res.status(401).json({ ok: false, error: "Wrong password" });
   }
 
-  return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
+  return res.status(405).json({ error: "Method not allowed" });
 }

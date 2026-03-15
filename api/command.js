@@ -1,28 +1,19 @@
-import { Redis } from "@upstash/redis";
+import { getRedis } from "./_redis.js";
 
-export const config = { runtime: "edge" };
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-const redis = Redis.fromEnv();
+  if (req.method === "OPTIONS") return res.status(200).end();
 
-export default async function handler(req) {
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json",
-  };
+  const redis = await getRedis();
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers });
-  }
-
-  // ── Dashboard POSTs a command ──
   if (req.method === "POST") {
-    const body = await req.json();
-    const cmd = { ...body, sentAt: Date.now(), done: false };
+    const cmd = { ...req.body, sentAt: Date.now(), done: false };
     await redis.set("command", JSON.stringify(cmd));
-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+    return res.status(200).json({ ok: true });
   }
 
-  return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
+  return res.status(405).json({ error: "Method not allowed" });
 }
