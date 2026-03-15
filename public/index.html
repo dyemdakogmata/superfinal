@@ -429,9 +429,16 @@ function clearErr() {
 function showStale(ts) {
   const ago = Math.round((Date.now() - ts) / 1000);
   $("stale").style.display = "block";
-  $("stale").textContent = `⚠ Last ESP32 update ${ago}s ago — device may be offline`;
+  $("stale").textContent = `⚠ ESP32 offline — last seen ${ago}s ago`;
+  $("connDot").className = "conn-dot err";
+  $("connLbl").textContent = "offline";
+  $("latency").textContent = "";
 }
-function clearStale() { $("stale").style.display = "none"; }
+function clearStale() {
+  $("stale").style.display = "none";
+  $("connDot").className = "conn-dot ok";
+  $("connLbl").textContent = "live";
+}
 
 function setPill(id, on) { $(id).className = "pill " + (on ? "on" : "off"); }
 function setBtn(id, on) {
@@ -484,7 +491,7 @@ async function poll() {
 
     clearErr();
 
-    if (d.updatedAt && Date.now() - d.updatedAt > 10000) {
+    if (d.updatedAt && Date.now() - d.updatedAt > 6000) {
       showStale(d.updatedAt);
     } else {
       clearStale();
