@@ -1,10 +1,20 @@
-import { getRedis } from "./_redis.js";
+const { createClient } = require("redis");
 
-export default async function handler(req, res) {
+let client = null;
+async function getRedis() {
+  if (client && client.isOpen) return client;
+  client = createClient({
+    socket: { host: process.env.REDIS_HOST, port: parseInt(process.env.REDIS_PORT) },
+    password: process.env.REDIS_PASSWORD,
+  });
+  await client.connect();
+  return client;
+}
+
+module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const redis = await getRedis();
@@ -15,7 +25,6 @@ export default async function handler(req, res) {
       redis.get("command"),
       redis.set("sensor", JSON.stringify({ ...data, updatedAt: Date.now() })),
     ]);
-
     let response = { ok: true, pending: false };
     if (cmdRaw) {
       const cmd = JSON.parse(cmdRaw);
@@ -35,4 +44,4 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).json({ error: "Method not allowed" });
-}
+};
