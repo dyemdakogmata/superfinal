@@ -220,11 +220,27 @@ const API = "";  // same origin — leave empty
 let fan = false;
 let heater = false, heaterManual = false;
 let turner = false, turnerManual = false;
-let heatInit = false, turnInit = false;
-let polling  = false;
+let polling = false;
+
+// Lock UI for 2s after sending a command so poll doesn't flicker it back
+const cmdLock = {};
+function lockFor(key, ms = 2000) { cmdLock[key] = Date.now() + ms; }
+function isLocked(key) { return cmdLock[key] && Date.now() < cmdLock[key]; }
+
+// Track which inputs user is actively editing — never overwrite mid-type
+const editing = new Set();
+window.addEventListener("DOMContentLoaded", () => {
+  ["minTemp","maxTemp","turnsPerDay","turnDur","firstTurn"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("focus", () => editing.add(id));
+    el.addEventListener("blur",  () => editing.delete(id));
+  });
+});
 
 // ── UTILS ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
+const syncInput = (id, val) => { if (!editing.has(id)) $(id).value = val; };
 
 function showErr(msg) {
   $("err").style.display = "block";
@@ -304,39 +320,41 @@ async function poll() {
     $("temp").innerHTML = d.temperature.toFixed(1) + '<span class="unit">°C</span>';
     $("hum").innerHTML  = d.humidity.toFixed(1)    + '<span class="unit">%</span>';
 
-    fan = d.fan === 1;
-    setPill("fanPill", fan);
-    $("fanTxt").textContent = fan ? "ON" : "OFF";
-    setBtn("fanBtn", fan);
+    if (!isLocked("fan")) {
+      fan = d.fan === 1;
+      setPill("fanPill", fan);
+      $("fanTxt").textContent = fan ? "ON" : "OFF";
+      setBtn("fanBtn", fan);
+    }
 
     heater       = d.heater === 1;
-    heaterManual = d.heaterManual === 1;
-    applyHeaterPanels(heaterManual);
+    if (!isLocked("heaterMode")) {
+      heaterManual = d.heaterManual === 1;
+      applyHeaterPanels(heaterManual);
+    }
     setPill("heaterPill", heater);
     $("heaterTxt").textContent = heater ? "ON" : "OFF";
     $("activeRange").textContent = d.minTemp.toFixed(1) + " – " + d.maxTemp.toFixed(1) + " °C";
-    if (!heatInit) {
-      $("minTemp").value = d.minTemp;
-      $("maxTemp").value = d.maxTemp;
-      heatInit = true;
-    }
+    // Always sync thresholds from ESP32 unless user is editing them
+    syncInput("minTemp", d.minTemp);
+    syncInput("maxTemp", d.maxTemp);
     if (heaterManual) setBtn("heaterBtn", d.heaterManualOn === 1);
 
     turner       = d.turner === 1;
-    turnerManual = d.turnerManual === 1;
-    applyTurnerPanels(turnerManual);
+    if (!isLocked("turnerMode")) {
+      turnerManual = d.turnerManual === 1;
+      applyTurnerPanels(turnerManual);
+    }
     setPill("turnerPill", turner);
     $("turnerTxt").textContent = turner ? "TURNING" : "IDLE";
-    if (!turnInit) {
-      $("turnsPerDay").value = d.turnsPerDay;
-      $("turnDur").value     = d.turnDurationHours;
-      const ftH = String(Math.floor(d.firstTurnMinutes / 60)).padStart(2, "0");
-      const ftM = String(d.firstTurnMinutes % 60).padStart(2, "0");
-      $("firstTurn").value = `${ftH}:${ftM}`;
-      updateIntervalLabel(d.turnsPerDay);
-      updateSchedulePreview();
-      turnInit = true;
-    }
+    // Always sync turner settings from ESP32 unless user is editing them
+    syncInput("turnsPerDay", d.turnsPerDay);
+    syncInput("turnDur", d.turnDurationHours);
+    const ftH = String(Math.floor(d.firstTurnMinutes / 60)).padStart(2, "0");
+    const ftM = String(d.firstTurnMinutes % 60).padStart(2, "0");
+    syncInput("firstTurn", `${ftH}:${ftM}`);
+    updateIntervalLabel(d.turnsPerDay);
+    updateSchedulePreview();
     if (turnerManual) setBtn("turnerBtn", d.turnerManualOn === 1);
     if (!turnerManual) {
       $("nextTurn").textContent = !d.ntpSynced ? "⚠ NTP not synced"
@@ -353,10 +371,18 @@ async function poll() {
 }
 
 // ── CONTROLS ──────────────────────────────────────────
-function toggleFan()    { sendCommand({ type: "fan",    state: fan ? 0 : 1 }); }
+function toggleFan() {
+  fan = !fan;
+  setPill("fanPill", fan);
+  $("fanTxt").textContent = fan ? "ON" : "OFF";
+  setBtn("fanBtn", fan);
+  lockFor("fan");
+  sendCommand({ type: "fan", state: fan ? 1 : 0 });
+}
 function setHeaterMode() {
   const isManual = $("heaterMode").value === "manual";
   applyHeaterPanels(isManual);
+  lockFor("heaterMode");
   sendCommand({ type: "heater", mode: isManual ? "manual" : "auto" });
 }
 function toggleHeater() {
@@ -373,6 +399,7 @@ function saveHeaterThresholds() {
 function setTurnerMode() {
   const isManual = $("turnerMode").value === "manual";
   applyTurnerPanels(isManual);
+  lockFor("turnerMode");
   sendCommand({ type: "turner", mode: isManual ? "manual" : "auto" });
 }
 function toggleTurner() {
