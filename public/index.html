@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Smart Incubator Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
     --bg:       #0d0f1a;
@@ -93,6 +94,46 @@
   .s-e { color: var(--muted); font-size: 11px; }
 
   .hidden { display: none !important; }
+
+  /* ── History section ── */
+  .hist-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-top: 28px; }
+  .hist-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .hist-title { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .hist-legend { display: flex; gap: 16px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; font-family: var(--mono); color: var(--muted); }
+  .leg-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .hist-meta { font-size: 11px; font-family: var(--mono); color: var(--muted); margin-bottom: 16px; }
+
+
+  /* ── Log table ── */
+  .log-wrap { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
+  .log-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .log-title { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .btn-sm { padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all 0.15s; }
+  .btn-sm:hover { color: var(--accent); border-color: var(--accent); }
+  .log-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  .log-table th { text-align: left; padding: 6px 10px; color: var(--muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  .log-table td { padding: 8px 10px; border-bottom: 1px solid rgba(31,34,64,0.4); }
+  .log-table tr:last-child td { border-bottom: none; }
+  .log-table tr:hover td { background: rgba(255,255,255,0.015); }
+  .td-temp { color: var(--accent); font-weight: 600; }
+  .td-hum  { color: var(--blue);   font-weight: 600; }
+  .td-time { color: var(--muted); }
+  .no-data { text-align: center; padding: 28px; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+  /* ── Full history modal ── */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; overflow-y: auto; padding: 32px 16px; }
+  .modal-bg.open { display: block; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; max-width: 780px; margin: 0 auto; padding: 24px; }
+  .modal-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .modal-hd h2 { font-size: 15px; font-weight: 800; }
+  .modal-close { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 10px; line-height: 1.5; }
+  .modal-close:hover { color: var(--text); border-color: var(--muted); }
+  .modal-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .mstat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .mstat-lbl { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
+  .mstat-val { font-size: 15px; font-family: var(--mono); color: var(--text); margin-top: 4px; }
+  .tbl-wrap { max-height: 460px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -210,8 +251,54 @@
     </div>
 
   </div>
+
+  <!-- ── Chart + Log combined card ── -->
+  <div class="hist-card">
+    <div class="hist-hd">
+      <span class="hist-title">Temperature &amp; Humidity</span>
+      <div class="hist-legend">
+        <span class="leg-item"><span class="leg-dot" style="background:var(--accent)"></span>Temp °C</span>
+        <span class="leg-item"><span class="leg-dot" style="background:var(--blue)"></span>Humidity %</span>
+      </div>
+    </div>
+    <div class="hist-meta" id="chartMeta">Every 15 min · last 20 readings</div>
+    <div style="position:relative;height:220px;"><canvas id="mainChart"></canvas></div>
+
+    <div class="log-wrap">
+      <div class="log-hd">
+        <span class="log-title">Data Log</span>
+        <button class="btn-sm" onclick="openHistory()">Full history →</button>
+      </div>
+      <div id="logBody"><div class="no-data">Waiting for first reading...</div></div>
+    </div>
+  </div>
+
 </div>
 
+<!-- ── Full History Modal ── -->
+<div class="modal-bg" id="historyModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <h2>Full History</h2>
+      <button class="modal-close" onclick="closeHistory()">✕</button>
+    </div>
+    <div class="modal-stats">
+      <div class="mstat"><div class="mstat-lbl">Total</div><div class="mstat-val" id="mTotal">—</div></div>
+      <div class="mstat"><div class="mstat-lbl">First entry</div><div class="mstat-val" id="mFirst">—</div></div>
+      <div class="mstat"><div class="mstat-lbl">Last entry</div><div class="mstat-val" id="mLast">—</div></div>
+      <div class="mstat"><div class="mstat-lbl">Avg temp</div><div class="mstat-val" id="mAvgTemp" style="color:var(--accent)">—</div></div>
+      <div class="mstat"><div class="mstat-lbl">Avg humidity</div><div class="mstat-val" id="mAvgHum" style="color:var(--blue)">—</div></div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="log-table" style="width:100%">
+        <thead><tr><th>#</th><th>Time</th><th>Temp °C</th><th>Humidity %</th></tr></thead>
+        <tbody id="mBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 // ── CONFIG ────────────────────────────────────────────
 const API = "";  // same origin — leave empty
@@ -457,12 +544,187 @@ function updateClock() {
   $('rtcDate').textContent = `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
 }
 
-// ── INIT ──────────────────────────────────────────────
+// ── HISTORY & CHARTS ─────────────────────────────────
+let mainChart = null;
+
+function fmtTs(ts) {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2,"0");
+  const mm = String(d.getMinutes()).padStart(2,"0");
+  const mo = String(d.getMonth()+1).padStart(2,"0");
+  const dy = String(d.getDate()).padStart(2,"0");
+  return `${mo}/${dy} ${hh}:${mm}`;
+}
+
+function initCharts() {
+  const ctx = document.getElementById("mainChart").getContext("2d");
+  mainChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: "Temp °C",
+          data: [],
+          borderColor: "#f5a623",
+          backgroundColor: "rgba(245,166,35,0.06)",
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#f5a623",
+          tension: 0.4,
+          fill: true,
+          yAxisID: "yTemp"
+        },
+        {
+          label: "Humidity %",
+          data: [],
+          borderColor: "#3d9cf5",
+          backgroundColor: "rgba(61,156,245,0.06)",
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#3d9cf5",
+          tension: 0.4,
+          fill: true,
+          yAxisID: "yHum"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#0d0f1a",
+          borderColor: "#1f2240",
+          borderWidth: 1,
+          padding: 10,
+          titleColor: "#5a6180",
+          bodyColor: "#dce3f0",
+          titleFont: { family: "monospace", size: 11 },
+          bodyFont:  { family: "monospace", size: 12 },
+          callbacks: {
+            title: items => items[0].label,
+            label: item => item.datasetIndex === 0
+              ? `  Temp     ${item.raw} °C`
+              : `  Humidity ${item.raw} %`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#5a6180", font: { size: 10 }, maxRotation: 0, maxTicksLimit: 6 },
+          grid:  { color: "rgba(31,34,64,0.5)", drawBorder: false }
+        },
+        yTemp: {
+          type: "linear", position: "left",
+          ticks: { color: "#f5a623", font: { size: 10 }, callback: v => v + "°" },
+          grid:  { color: "rgba(31,34,64,0.5)", drawBorder: false }
+        },
+        yHum: {
+          type: "linear", position: "right",
+          ticks: { color: "#3d9cf5", font: { size: 10 }, callback: v => v + "%" },
+          grid:  { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+}
+
+function renderChartAndLog(data) {
+  if (!data || !data.length) return;
+
+  const labels = data.map(d => fmtTs(d.ts));
+
+  if (mainChart) {
+    mainChart.data.labels = labels;
+    mainChart.data.datasets[0].data = data.map(d => d.temp);
+    mainChart.data.datasets[1].data = data.map(d => d.hum);
+    mainChart.update("none");
+  }
+
+  // Update meta line
+  const span = data.length > 1
+    ? `${data.length} readings · ${fmtTs(data[0].ts)} → ${fmtTs(data[data.length-1].ts)}`
+    : `${data.length} reading`;
+  $("chartMeta").textContent = "Every 15 min · " + span;
+
+  // Render compact log table
+  let rows = [...data].reverse().map(d =>
+    `<tr>
+      <td class="td-time">${fmtTs(d.ts)}</td>
+      <td class="td-temp">${d.temp.toFixed(1)}°C</td>
+      <td class="td-hum">${d.hum.toFixed(1)}%</td>
+    </tr>`
+  ).join("");
+
+  $("logBody").innerHTML = `<table class="log-table">
+    <thead><tr><th>Time</th><th>Temp</th><th>Humidity</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch(`${API}/api/history?limit=20`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.ok && d.data.length) renderChartAndLog(d.data);
+  } catch (_) {}
+}
+
+// ── FULL HISTORY MODAL ────────────────────────────────
+async function openHistory() {
+  $("historyModal").classList.add("open");
+  $("mBody").innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);font-family:monospace;font-size:12px">Loading...</td></tr>`;
+  try {
+    const r = await fetch(`${API}/api/history?limit=all`);
+    if (!r.ok) throw new Error("failed");
+    const d = await r.json();
+    if (!d.ok || !d.data.length) {
+      $("mBody").innerHTML = `<tr><td colspan="4" class="no-data">No history yet — first entry in 15 min</td></tr>`;
+      return;
+    }
+    const all = d.data;
+    $("mTotal").textContent    = all.length;
+    $("mFirst").textContent    = fmtTs(all[0].ts);
+    $("mLast").textContent     = fmtTs(all[all.length-1].ts);
+    $("mAvgTemp").textContent  = (all.reduce((s,x) => s+x.temp, 0) / all.length).toFixed(1) + " °C";
+    $("mAvgHum").textContent   = (all.reduce((s,x) => s+x.hum,  0) / all.length).toFixed(1) + " %";
+
+    $("mBody").innerHTML = [...all].reverse().map((d, i) =>
+      `<tr>
+        <td class="td-time">${all.length - i}</td>
+        <td class="td-time">${fmtTs(d.ts)}</td>
+        <td class="td-temp">${d.temp.toFixed(1)}°C</td>
+        <td class="td-hum">${d.hum.toFixed(1)}%</td>
+      </tr>`
+    ).join("");
+  } catch (e) {
+    $("mBody").innerHTML = `<tr><td colspan="4" style="color:var(--red);padding:16px;font-family:monospace;font-size:12px">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function closeHistory() { $("historyModal").classList.remove("open"); }
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("historyModal").addEventListener("click", e => {
+    if (e.target === $("historyModal")) closeHistory();
+  });
+});
+
 updateSchedulePreview();
 updateClock();
 setInterval(updateClock, 1000);
+initCharts();
+loadHistory();
+setInterval(loadHistory, 60 * 1000);  // refresh chart/log every 60s
 poll();
-setInterval(poll, 500);  // poll every 500ms
+setInterval(poll, 500);
 </script>
 </body>
 </html>
