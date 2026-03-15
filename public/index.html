@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Incubator Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0d0f1a;
+    --surface:  #141627;
+    --border:   #1f2240;
+    --accent:   #f5a623;
+    --green:    #00e5a0;
+    --red:      #ff4d6d;
+    --blue:     #3d9cf5;
+    --text:     #dce3f0;
+    --muted:    #5a6180;
+    --mono:     'Share Tech Mono', monospace;
+    --ui:       'Exo 2', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--ui); background: var(--bg); color: var(--text); min-height: 100vh; padding: 30px 20px 60px; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: linear-gradient(rgba(245,166,35,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(245,166,35,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; }
+
+  header { display: flex; align-items: center; gap: 16px; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .logo  { width: 44px; height: 44px; background: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  header h1 { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; }
+  header h1 span { color: var(--accent); }
+  .conn-dot   { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+  .conn-dot.ok  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .conn-dot.err { background: var(--red);   box-shadow: 0 0 8px var(--red);   }
+  .conn-lbl { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .rtc { display: flex; flex-direction: column; align-items: flex-end; margin-left: auto; }
+  .rtc-time { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; line-height: 1; }
+  .rtc-date { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  #err { display: none; background: rgba(255,77,109,0.12); border: 1px solid var(--red); color: var(--red); padding: 10px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 24px; font-family: var(--mono); }
+  #stale { display: none; background: rgba(245,166,35,0.10); border: 1px solid var(--accent); color: var(--accent); padding: 10px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 24px; font-family: var(--mono); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; position: relative; overflow: hidden; }
+  .bar  { position: absolute; top: 0; left: 24px; right: 24px; height: 2px; border-radius: 0 0 4px 4px; }
+  .bar-a { background: var(--accent); }
+  .bar-g { background: var(--green);  }
+  .bar-b { background: var(--blue);   }
+  .bar-r { background: var(--red);    }
+  .card-title { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+
+  .big { font-family: var(--mono); font-size: 52px; line-height: 1; }
+  .unit { font-size: 20px; color: var(--muted); margin-left: 4px; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-family: var(--mono); padding: 4px 10px; border-radius: 20px; margin-top: 12px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .pill.on  { border-color: rgba(0,229,160,0.25); color: var(--green); }
+  .pill.on  .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .pill.off { border-color: rgba(255,77,109,0.2); color: var(--red); }
+  .pill.off .dot { background: var(--red); box-shadow: 0 0 4px var(--red); }
+
+  .col  { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+  .lbl  { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 5px; }
+  .note { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+  .two  { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  select, input[type="number"], input[type="time"] {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 14px; outline: none; transition: border-color 0.2s;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  input[type="number"] { -moz-appearance: textfield; }
+  input[type="number"]::-webkit-inner-spin-button { opacity: 0.4; }
+
+  .btn { display: flex; align-items: center; justify-content: center; padding: 10px 16px; border: none; border-radius: 8px; font-family: var(--ui); font-size: 13px; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.15s; }
+  .btn:active { transform: scale(0.97); }
+  .btn:hover  { filter: brightness(1.15); }
+  .btn-on   { background: rgba(255,77,109,0.15); color: var(--red);    border: 1px solid rgba(255,77,109,0.3); }
+  .btn-off  { background: rgba(0,229,160,0.12);  color: var(--green);  border: 1px solid rgba(0,229,160,0.25); }
+  .btn-save { background: rgba(245,166,35,0.15); color: var(--accent); border: 1px solid rgba(245,166,35,0.3); }
+
+  .sched-list { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+  .sched-item { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+  .s-n { color: var(--accent); font-size: 11px; min-width: 48px; }
+  .s-t { color: var(--text); }
+  .s-e { color: var(--muted); font-size: 11px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">🥚</div>
+    <h1>Smart <span>Incubator</span></h1>
+    <span class="conn-lbl" id="connLbl">connecting...</span>
+    <div class="conn-dot" id="connDot"></div>
+    <div class="rtc">
+      <div class="rtc-time" id="rtcTime">--:--:--</div>
+      <div class="rtc-date" id="rtcDate">--- -- ----</div>
+    </div>
+  </header>
+
+  <div id="err"></div>
+  <div id="stale"></div>
+
+  <div class="grid">
+
+    <!-- Temperature -->
+    <div class="card">
+      <div class="bar bar-a"></div>
+      <div class="card-title">Temperature</div>
+      <div class="big" id="temp">--<span class="unit">°C</span></div>
+    </div>
+
+    <!-- Humidity -->
+    <div class="card">
+      <div class="bar bar-b"></div>
+      <div class="card-title">Humidity</div>
+      <div class="big" id="hum">--<span class="unit">%</span></div>
+    </div>
+
+    <!-- Heater -->
+    <div class="card">
+      <div class="bar bar-r"></div>
+      <div class="card-title">Heater Control</div>
+      <div class="pill off" id="heaterPill">
+        <span class="dot"></span>
+        <span>Heater <span id="heaterTxt">OFF</span></span>
+      </div>
+      <div class="col">
+        <div>
+          <label class="lbl">Mode</label>
+          <select id="heaterMode" onchange="setHeaterMode()">
+            <option value="auto">Automatic</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div id="heaterAutoPanel">
+          <div class="note">Active: <span id="activeRange" style="color:var(--accent)">-- – -- °C</span></div>
+          <div class="two" style="margin-top:10px;">
+            <div><label class="lbl">Min °C</label><input type="number" id="minTemp" step="0.1" placeholder="36.5"></div>
+            <div><label class="lbl">Max °C</label><input type="number" id="maxTemp" step="0.1" placeholder="37.5"></div>
+          </div>
+          <br>
+          <button class="btn btn-save" onclick="saveHeaterThresholds()">💾 Save Thresholds</button>
+        </div>
+        <div id="heaterManualPanel" class="hidden">
+          <button class="btn btn-off" id="heaterBtn" onclick="toggleHeater()">Turn ON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fan -->
+    <div class="card">
+      <div class="bar bar-g"></div>
+      <div class="card-title">Fan Control</div>
+      <div class="pill off" id="fanPill">
+        <span class="dot"></span>
+        <span id="fanTxt">OFF</span>
+      </div>
+      <br><br>
+      <button class="btn btn-off" id="fanBtn" onclick="toggleFan()">Turn ON</button>
+    </div>
+
+    <!-- Turner -->
+    <div class="card">
+      <div class="bar bar-a"></div>
+      <div class="card-title">Egg Turner</div>
+      <div class="pill off" id="turnerPill">
+        <span class="dot"></span>
+        <span id="turnerTxt">IDLE</span>
+      </div>
+      <div class="col">
+        <div>
+          <label class="lbl">Mode</label>
+          <select id="turnerMode" onchange="setTurnerMode()">
+            <option value="auto">Automatic</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div id="turnerAutoPanel">
+          <div class="note">Next turn in: <span id="nextTurn">--</span></div>
+          <div class="two" style="margin-top:10px;">
+            <div><label class="lbl">Turns / day</label><input type="number" id="turnsPerDay" value="3" min="1" max="48" oninput="updateSchedulePreview()"></div>
+            <div><label class="lbl">Duration (hrs)</label><input type="number" id="turnDur" value="1" min="0.1" max="23.9" step="0.1" oninput="updateSchedulePreview()"></div>
+          </div>
+          <div class="note" style="margin-top:6px;">Interval: <span id="intervalLbl">every 8h 0m</span></div>
+          <div style="margin-top:10px;">
+            <label class="lbl">First turn at</label>
+            <input type="time" id="firstTurn" value="06:00" oninput="updateSchedulePreview()">
+          </div>
+          <br>
+          <button class="btn btn-save" onclick="saveTurnerSchedule()">💾 Save Schedule</button>
+          <div id="schedPreview" style="margin-top:14px;"></div>
+        </div>
+        <div id="turnerManualPanel" class="hidden">
+          <button class="btn btn-off" id="turnerBtn" onclick="toggleTurner()">Turn ON</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────
+const API = ""; // empty = same origin (Vercel), e.g. "https://egg-dashboard.vercel.app"
+
+// ── STATE ─────────────────────────────────────────────
+let fan = false;
+let heater = false, heaterManual = false;
+let turner = false, turnerManual = false;
+let heatInit = false, turnInit = false;
+
+// ── UTILS ─────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function showErr(msg) {
+  $("err").style.display = "block";
+  $("err").textContent = "⚠ " + msg;
+  $("connDot").className = "conn-dot err";
+  $("connLbl").textContent = "offline";
+}
+function clearErr() {
+  $("err").style.display = "none";
+  $("connDot").className = "conn-dot ok";
+  $("connLbl").textContent = "live";
+}
+function showStale(ts) {
+  const ago = Math.round((Date.now() - ts) / 1000);
+  $("stale").style.display = "block";
+  $("stale").textContent = `⚠ Last ESP32 update ${ago}s ago — device may be offline`;
+}
+function clearStale() { $("stale").style.display = "none"; }
+
+function setPill(id, on) { $(id).className = "pill " + (on ? "on" : "off"); }
+function setBtn(id, on) {
+  $(id).textContent = on ? "Turn OFF" : "Turn ON";
+  $(id).className = "btn " + (on ? "btn-on" : "btn-off");
+}
+function show(id) { $(id).classList.remove("hidden"); }
+function hide(id) { $(id).classList.add("hidden"); }
+
+function applyHeaterPanels(isManual) {
+  isManual ? (hide("heaterAutoPanel"), show("heaterManualPanel")) : (show("heaterAutoPanel"), hide("heaterManualPanel"));
+  $("heaterMode").value = isManual ? "manual" : "auto";
+}
+function applyTurnerPanels(isManual) {
+  isManual ? (hide("turnerAutoPanel"), show("turnerManualPanel")) : (show("turnerAutoPanel"), hide("turnerManualPanel"));
+  $("turnerMode").value = isManual ? "manual" : "auto";
+}
+
+// Send a command to Vercel → ESP32 will pick it up
+async function sendCommand(payload) {
+  try {
+    await fetch(`${API}/api/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) { showErr("Command failed: " + e.message); }
+}
+
+// ── POLL SENSOR DATA FROM VERCEL ──────────────────────
+async function poll() {
+  try {
+    const r = await fetch(`${API}/api/sensor`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+
+    if (!d || d.ok === false) {
+      showErr("No data from ESP32 yet — waiting...");
+      return;
+    }
+
+    clearErr();
+
+    // Stale check — warn if ESP32 hasn't posted in >10s
+    if (d.updatedAt && Date.now() - d.updatedAt > 10000) {
+      showStale(d.updatedAt);
+    } else {
+      clearStale();
+    }
+
+    $("temp").innerHTML = d.temperature.toFixed(1) + '<span class="unit">°C</span>';
+    $("hum").innerHTML  = d.humidity.toFixed(1)    + '<span class="unit">%</span>';
+
+    fan = d.fan === 1;
+    setPill("fanPill", fan);
+    $("fanTxt").textContent = fan ? "ON" : "OFF";
+    setBtn("fanBtn", fan);
+
+    heater       = d.heater === 1;
+    heaterManual = d.heaterManual === 1;
+    applyHeaterPanels(heaterManual);
+    setPill("heaterPill", heater);
+    $("heaterTxt").textContent = heater ? "ON" : "OFF";
+    $("activeRange").textContent = d.minTemp.toFixed(1) + " – " + d.maxTemp.toFixed(1) + " °C";
+    if (!heatInit) {
+      $("minTemp").value = d.minTemp;
+      $("maxTemp").value = d.maxTemp;
+      heatInit = true;
+    }
+    if (heaterManual) setBtn("heaterBtn", d.heaterManualOn === 1);
+
+    turner       = d.turner === 1;
+    turnerManual = d.turnerManual === 1;
+    applyTurnerPanels(turnerManual);
+    setPill("turnerPill", turner);
+    $("turnerTxt").textContent = turner ? "TURNING" : "IDLE";
+    if (!turnInit) {
+      $("turnsPerDay").value = d.turnsPerDay;
+      $("turnDur").value     = d.turnDurationHours;
+      const ftH = String(Math.floor(d.firstTurnMinutes / 60)).padStart(2, "0");
+      const ftM = String(d.firstTurnMinutes % 60).padStart(2, "0");
+      $("firstTurn").value = `${ftH}:${ftM}`;
+      updateIntervalLabel(d.turnsPerDay);
+      updateSchedulePreview();
+      turnInit = true;
+    }
+    if (turnerManual) setBtn("turnerBtn", d.turnerManualOn === 1);
+    if (!turnerManual) {
+      if (!d.ntpSynced) {
+        $("nextTurn").textContent = "⚠ NTP not synced";
+      } else if (turner) {
+        $("nextTurn").textContent = "Turning now...";
+      } else {
+        $("nextTurn").textContent = fmtCountdown(d.nextTurnSec);
+      }
+    }
+
+    // Sync RTC from ESP32 time if available
+    if (d.currentTime && d.currentTime !== "--:--:--") {
+      $("rtcTime").textContent = d.currentTime;
+    }
+
+  } catch (e) {
+    showErr("Cannot reach Vercel API — " + e.message);
+  }
+}
+
+// ── FAN ───────────────────────────────────────────────
+function toggleFan() {
+  sendCommand({ type: "fan", state: fan ? 0 : 1 });
+}
+
+// ── HEATER ────────────────────────────────────────────
+function setHeaterMode() {
+  const isManual = $("heaterMode").value === "manual";
+  applyHeaterPanels(isManual);
+  sendCommand({ type: "heater", mode: isManual ? "manual" : "auto" });
+}
+function toggleHeater() {
+  const currentlyOn = $("heaterBtn").textContent.trim() === "Turn OFF";
+  sendCommand({ type: "heater", state: currentlyOn ? 0 : 1 });
+}
+function saveHeaterThresholds() {
+  const min = parseFloat($("minTemp").value);
+  const max = parseFloat($("maxTemp").value);
+  if (isNaN(min) || isNaN(max)) { alert("Enter valid numbers."); return; }
+  if (min >= max) { alert("Min must be lower than Max."); return; }
+  sendCommand({ type: "heater", min, max });
+}
+
+// ── TURNER ────────────────────────────────────────────
+function setTurnerMode() {
+  const isManual = $("turnerMode").value === "manual";
+  applyTurnerPanels(isManual);
+  sendCommand({ type: "turner", mode: isManual ? "manual" : "auto" });
+}
+function toggleTurner() {
+  const currentlyOn = $("turnerBtn").textContent.trim() === "Turn OFF";
+  sendCommand({ type: "turner", state: currentlyOn ? 0 : 1 });
+}
+function saveTurnerSchedule() {
+  const turns = parseInt($("turnsPerDay").value);
+  const dur   = parseFloat($("turnDur").value);
+  const [fH, fM] = ($("firstTurn").value || "06:00").split(":").map(Number);
+  const firstMin = fH * 60 + fM;
+  if (turns < 1 || turns > 48)  { alert("Turns per day: 1–48."); return; }
+  if (dur < 0.1 || dur > 23.9)  { alert("Duration: 0.1–23.9 hrs."); return; }
+  if (dur >= 24 / turns)        { alert(`Duration must be less than interval (${(24/turns).toFixed(1)}h).`); return; }
+  updateIntervalLabel(turns);
+  updateSchedulePreview();
+  sendCommand({ type: "turner", turnsPerDay: turns, durationHours: dur, firstTurnMinutes: firstMin });
+}
+
+// ── SCHEDULE PREVIEW ──────────────────────────────────
+function updateIntervalLabel(turns) {
+  const s = (24 * 3600) / turns;
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  $("intervalLbl").textContent = `every ${h > 0 ? h+"h " : ""}${m}m`;
+}
+function fmtCountdown(t) {
+  if (!t || t <= 0) return "soon";
+  const h = Math.floor(t/3600), m = Math.floor((t%3600)/60), s = t%60;
+  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+function updateSchedulePreview() {
+  const turns = parseInt($("turnsPerDay").value) || 1;
+  const dur   = parseFloat($("turnDur").value) || 0;
+  const [sH, sM] = ($("firstTurn").value || "06:00").split(":").map(Number);
+  const intMin = (24 * 60) / turns;
+  const durMin = Math.round(dur * 60);
+  const fmt = n => [String(Math.floor(n/60)).padStart(2,"0"), String(n%60).padStart(2,"0")].join(":");
+  let html = `<div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Calculated Schedule</div><div class="sched-list">`;
+  for (let i = 0; i < turns; i++) {
+    const st = (sH*60 + sM + Math.round(intMin*i)) % 1440;
+    const et = (st + durMin) % 1440;
+    html += `<div class="sched-item"><span class="s-n">Turn ${i+1}</span><span class="s-t">${fmt(st)}</span><span class="s-e">→ ${fmt(et)}</span></div>`;
+  }
+  $("schedPreview").innerHTML = html + "</div>";
+  updateIntervalLabel(turns);
+}
+
+// ── RTC ───────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  $('rtcTime').textContent = `${hh}:${mm}:${ss}`;
+  $('rtcDate').textContent = `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
+}
+
+// ── INIT ──────────────────────────────────────────────
+updateSchedulePreview();
+updateClock();
+setInterval(updateClock, 1000);
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>
