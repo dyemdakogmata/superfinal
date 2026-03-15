@@ -395,18 +395,24 @@ function isLocked(key) { return cmdLock[key] && Date.now() < cmdLock[key]; }
 
 // Track which inputs user is actively editing — never overwrite mid-type
 const editing = new Set();
-window.addEventListener("DOMContentLoaded", () => {
-  ["minTemp","maxTemp","turnsPerDay","turnDur","firstTurn"].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener("focus", () => editing.add(id));
-    el.addEventListener("blur",  () => editing.delete(id));
-  });
-});
 
 // ── UTILS ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const syncInput = (id, val) => { if (!editing.has(id)) $(id).value = val; };
+const syncInput = (id, val) => { if (!editing.has(id) && !isLocked("input_" + id)) $(id).value = val; };
+
+// Attach focus/blur immediately (script is at bottom of body, DOM is ready)
+["minTemp","maxTemp","turnsPerDay","turnDur","firstTurn"].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("focus", () => editing.add(id));
+  el.addEventListener("blur",  () => editing.delete(id));
+  // Also track input event so typing mid-value is protected
+  el.addEventListener("input", () => editing.add(id));
+  el.addEventListener("change", () => {
+    // Keep locked for 3s after user changes a value (time for command to reach ESP32)
+    lockFor("input_" + id, 3000);
+  });
+});
 
 function showErr(msg) {
   $("err").style.display = "block";
@@ -501,10 +507,13 @@ async function poll() {
     }
     setPill("heaterPill", heater);
     $("heaterTxt").textContent = heater ? "ON" : "OFF";
-    $("activeRange").textContent = d.minTemp.toFixed(1) + " – " + d.maxTemp.toFixed(1) + " °C";
     // Always sync thresholds from ESP32 unless user is editing them
     syncInput("minTemp", d.minTemp);
     syncInput("maxTemp", d.maxTemp);
+    // Only update active range display when not editing thresholds
+    if (!editing.has("minTemp") && !editing.has("maxTemp")) {
+      $("activeRange").textContent = d.minTemp.toFixed(1) + " – " + d.maxTemp.toFixed(1) + " °C";
+    }
     if (heaterManual) setBtn("heaterBtn", d.heaterManualOn === 1);
 
     turner       = d.turner === 1;
@@ -561,6 +570,8 @@ function saveHeaterThresholds() {
   const max = parseFloat($("maxTemp").value);
   if (isNaN(min) || isNaN(max)) { alert("Enter valid numbers."); return; }
   if (min >= max) { alert("Min must be lower than Max."); return; }
+  // Lock heater inputs for 3s so ESP32 has time to confirm
+  ["minTemp","maxTemp"].forEach(id => lockFor("input_" + id, 3000));
   sendCommand({ type: "heater", min, max });
 }
 function setTurnerMode() {
@@ -581,6 +592,8 @@ function saveTurnerSchedule() {
   if (turns < 1 || turns > 48)  { alert("Turns per day: 1–48."); return; }
   if (dur < 0.1 || dur > 23.9)  { alert("Duration: 0.1–23.9 hrs."); return; }
   if (dur >= 24 / turns)        { alert(`Duration must be less than interval (${(24/turns).toFixed(1)}h).`); return; }
+  // Lock turner inputs for 3s so ESP32 has time to confirm
+  ["turnsPerDay","turnDur","firstTurn"].forEach(id => lockFor("input_" + id, 3000));
   updateIntervalLabel(turns);
   updateSchedulePreview();
   sendCommand({ type: "turner", turnsPerDay: turns, durationHours: dur, firstTurnMinutes: firstMin });
