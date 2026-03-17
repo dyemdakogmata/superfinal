@@ -393,25 +393,25 @@ const cmdLock = {};
 function lockFor(key, ms = 2000) { cmdLock[key] = Date.now() + ms; }
 function isLocked(key) { return cmdLock[key] && Date.now() < cmdLock[key]; }
 
-// Track which inputs user is actively editing — never overwrite mid-type
-const editing = new Set();
-
 // ── UTILS ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const syncInput = (id, val) => { if (!editing.has(id) && !isLocked("input_" + id)) $(id).value = val; };
 
-// Attach focus/blur immediately (script is at bottom of body, DOM is ready)
+// Per-field "hands-off until" timestamp — poll never overwrites an input
+// that the user touched in the last N ms
+const inputLastTouched = {};
+const INPUT_COOLDOWN = 8000;  // 8s after last touch before poll can overwrite
+
+function touchInput(id) { inputLastTouched[id] = Date.now(); }
+function inputFree(id)  { return !inputLastTouched[id] || Date.now() - inputLastTouched[id] > INPUT_COOLDOWN; }
+const syncInput = (id, val) => { if (inputFree(id)) $(id).value = val; };
+
+// Any interaction on these inputs marks them as touched
 ["minTemp","maxTemp","turnsPerDay","turnDur","firstTurn"].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
-  el.addEventListener("focus", () => editing.add(id));
-  el.addEventListener("blur",  () => editing.delete(id));
-  // Also track input event so typing mid-value is protected
-  el.addEventListener("input", () => editing.add(id));
-  el.addEventListener("change", () => {
-    // Keep locked for 3s after user changes a value (time for command to reach ESP32)
-    lockFor("input_" + id, 3000);
-  });
+  ["focus","input","change","keydown","touchstart","mousedown"].forEach(evt =>
+    el.addEventListener(evt, () => touchInput(id), { passive: true })
+  );
 });
 
 function showErr(msg) {
@@ -518,7 +518,7 @@ async function poll() {
     syncInput("minTemp", d.minTemp);
     syncInput("maxTemp", d.maxTemp);
     // Only update active range display when not editing thresholds
-    if (!editing.has("minTemp") && !editing.has("maxTemp")) {
+    if (inputFree("minTemp") && inputFree("maxTemp")) {
       $("activeRange").textContent = d.minTemp.toFixed(1) + " – " + d.maxTemp.toFixed(1) + " °C";
     }
     if (heaterManual) setBtn("heaterBtn", d.heaterManualOn === 1);
@@ -536,8 +536,11 @@ async function poll() {
     const ftH = String(Math.floor(d.firstTurnMinutes / 60)).padStart(2, "0");
     const ftM = String(d.firstTurnMinutes % 60).padStart(2, "0");
     syncInput("firstTurn", `${ftH}:${ftM}`);
-    updateIntervalLabel(d.turnsPerDay);
-    updateSchedulePreview();
+    // Only update schedule preview if none of the turner inputs are being edited
+    if (inputFree("turnsPerDay") && inputFree("turnDur") && inputFree("firstTurn")) {
+      updateIntervalLabel(d.turnsPerDay);
+      updateSchedulePreview();
+    }
     if (turnerManual) setBtn("turnerBtn", d.turnerManualOn === 1);
     if (!turnerManual) {
       $("nextTurn").textContent = !d.ntpSynced ? "⚠ NTP not synced"
@@ -577,8 +580,8 @@ function saveHeaterThresholds() {
   const max = parseFloat($("maxTemp").value);
   if (isNaN(min) || isNaN(max)) { alert("Enter valid numbers."); return; }
   if (min >= max) { alert("Min must be lower than Max."); return; }
-  // Lock heater inputs for 3s so ESP32 has time to confirm
-  ["minTemp","maxTemp"].forEach(id => lockFor("input_" + id, 3000));
+  // Mark inputs as recently touched so poll won't overwrite during save
+  ["minTemp","maxTemp"].forEach(id => touchInput(id));
   sendCommand({ type: "heater", min, max });
 }
 function setTurnerMode() {
@@ -599,8 +602,8 @@ function saveTurnerSchedule() {
   if (turns < 1 || turns > 48)  { alert("Turns per day: 1–48."); return; }
   if (dur < 0.1 || dur > 23.9)  { alert("Duration: 0.1–23.9 hrs."); return; }
   if (dur >= 24 / turns)        { alert(`Duration must be less than interval (${(24/turns).toFixed(1)}h).`); return; }
-  // Lock turner inputs for 3s so ESP32 has time to confirm
-  ["turnsPerDay","turnDur","firstTurn"].forEach(id => lockFor("input_" + id, 3000));
+  // Mark inputs as recently touched so poll won't overwrite during save
+  ["turnsPerDay","turnDur","firstTurn"].forEach(id => touchInput(id));
   updateIntervalLabel(turns);
   updateSchedulePreview();
   sendCommand({ type: "turner", turnsPerDay: turns, durationHours: dur, firstTurnMinutes: firstMin });
