@@ -454,6 +454,7 @@ function clearErr() {
   $("err").style.display = "none";
   $("connDot").className = "conn-dot ok";
   $("connLbl").textContent = "live";
+  checkDeviceStatus(true);
 }
 function showStale(ts) {
   const ago = Math.round((Date.now() - ts) / 1000);
@@ -462,6 +463,7 @@ function showStale(ts) {
   $("connDot").className = "conn-dot err";
   $("connLbl").textContent = "offline";
   $("latency").textContent = "";
+  checkDeviceStatus(false);
 }
 function clearStale() {
   $("stale").style.display = "none";
@@ -1007,12 +1009,62 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+// ── ALERT SYSTEM ──────────────────────────────────────
+let deviceWasOffline = false;
+let notifPermission  = false;
+
+async function requestNotifPermission() {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "granted") { notifPermission = true; return; }
+  if (Notification.permission !== "denied") {
+    const p = await Notification.requestPermission();
+    notifPermission = p === "granted";
+  }
+}
+
+function sendBrowserNotif(title, body) {
+  if (!notifPermission || Notification.permission !== "granted") return;
+  const n = new Notification(title, {
+    body,
+    icon: "https://superfinal-sandy.vercel.app/favicon.ico",
+    badge: "https://superfinal-sandy.vercel.app/favicon.ico",
+    tag: "incubator-alert",
+    renotify: true
+  });
+  setTimeout(() => n.close(), 8000);
+}
+
+async function sendEmailAlert(type) {
+  try {
+    await fetch(`${API}/api/alert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type })
+    });
+  } catch (_) {}
+}
+
+function checkDeviceStatus(isOnline) {
+  if (!isOnline && !deviceWasOffline) {
+    // Just went offline
+    deviceWasOffline = true;
+    sendBrowserNotif("Incubator offline", "Your egg incubator lost connection. Please check the device.");
+    sendEmailAlert("offline");
+  } else if (isOnline && deviceWasOffline) {
+    // Just came back online
+    deviceWasOffline = false;
+    sendBrowserNotif("Incubator online", "Your egg incubator is back online.");
+    sendEmailAlert("online");
+  }
+}
+
 updateSchedulePreview();
 updateClock();
 setInterval(updateClock, 1000);
 initCharts();
 loadHistory();
 setInterval(loadHistory, 60 * 1000);  // refresh chart/log every 60s
+requestNotifPermission();
 poll();
 setInterval(poll, 500);
 </script>
