@@ -738,45 +738,65 @@ function initCharts() {
   });
 }
 
-function renderChartAndLog(data) {
-  if (!data || !data.length) return;
-
-  const labels = data.map(d => fmtTs(d.ts));
-
-  if (mainChart) {
-    mainChart.data.labels = labels;
-    mainChart.data.datasets[0].data = data.map(d => d.temp);
-    mainChart.data.datasets[1].data = data.map(d => d.hum);
-    mainChart.update("none");
+function renderChartAndLog(data, events) {
+  if (data && data.length) {
+    const labels = data.map(d => fmtTs(d.ts));
+    if (mainChart) {
+      mainChart.data.labels = labels;
+      mainChart.data.datasets[0].data = data.map(d => d.temp);
+      mainChart.data.datasets[1].data = data.map(d => d.hum);
+      mainChart.update("none");
+    }
+    const span = data.length > 1
+      ? `${data.length} readings · ${fmtTs(data[0].ts)} -> ${fmtTs(data[data.length-1].ts)}`
+      : `${data.length} reading`;
+    $("chartMeta").textContent = "Every 15 min · " + span;
   }
 
-  // Update meta line
-  const span = data.length > 1
-    ? `${data.length} readings · ${fmtTs(data[0].ts)} → ${fmtTs(data[data.length-1].ts)}`
-    : `${data.length} reading`;
-  $("chartMeta").textContent = "Every 15 min · " + span;
+  const sensorRows = (data || []).map(d => ({ ts: d.ts, kind: "sensor", temp: d.temp, hum: d.hum }));
+  const eventRows  = (events || []).map(e => ({ ts: e.ts, kind: "event", state: e.state, mode: e.mode }));
+  const merged = [...sensorRows, ...eventRows].sort((a, b) => b.ts - a.ts).slice(0, 20);
 
-  // Render compact log table
-  let rows = [...data].reverse().map(d =>
-    `<tr>
-      <td class="td-time">${fmtTs(d.ts)}</td>
-      <td class="td-temp">${d.temp.toFixed(1)}°C</td>
-      <td class="td-hum">${d.hum.toFixed(1)}%</td>
-    </tr>`
-  ).join("");
+  if (!merged.length) {
+    $("logBody").innerHTML = `<div class="no-data">Waiting for first reading...</div>`;
+    return;
+  }
+
+  const rows = merged.map(row => {
+    if (row.kind === "sensor") {
+      return `<tr>
+        <td class="td-time">${fmtTs(row.ts)}</td>
+        <td><span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(61,156,245,0.12);color:var(--blue);font-family:monospace">sensor</span></td>
+        <td class="td-temp">${row.temp.toFixed(1)}°C</td>
+        <td class="td-hum">${row.hum.toFixed(1)}%</td>
+        <td class="td-time">—</td>
+      </tr>`;
+    } else {
+      const on = row.state === "ON";
+      return `<tr>
+        <td class="td-time">${fmtTs(row.ts)}</td>
+        <td><span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(245,166,35,0.12);color:var(--accent);font-family:monospace">turner</span></td>
+        <td colspan="2" style="color:${on ? "var(--green)" : "var(--muted)"}; font-family:monospace; font-size:12px;">${on ? "Started turning" : "Stopped turning"}</td>
+        <td class="td-time">${row.mode}</td>
+      </tr>`;
+    }
+  }).join("");
 
   $("logBody").innerHTML = `<table class="log-table">
-    <thead><tr><th>Time</th><th>Temp</th><th>Humidity</th></tr></thead>
+    <thead><tr><th>Time</th><th>Type</th><th>Temp</th><th>Humidity</th><th>Mode</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
 }
 
 async function loadHistory() {
   try {
-    const r = await fetch(`${API}/api/history?limit=20`);
-    if (!r.ok) return;
-    const d = await r.json();
-    if (d.ok && d.data.length) renderChartAndLog(d.data);
+    const [rh, re] = await Promise.all([
+      fetch(`${API}/api/history?limit=20`),
+      fetch(`${API}/api/events?limit=20`)
+    ]);
+    const dh = rh.ok ? await rh.json() : { ok: false, data: [] };
+    const de = re.ok ? await re.json() : { ok: false, data: [] };
+    renderChartAndLog(dh.ok ? dh.data : [], de.ok ? de.data : []);
   } catch (_) {}
 }
 
