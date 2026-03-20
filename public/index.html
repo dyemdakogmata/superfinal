@@ -180,6 +180,8 @@
   .view-banner { display: none; background: rgba(90,97,128,0.1); border: 1px solid var(--border); color: var(--muted); padding: 8px 14px; border-radius: 8px; font-size: 11px; font-family: var(--mono); text-align: center; margin-bottom: 16px; }
   .view-mode-active .view-banner { display: block; }
 
+
+
   /* ── Desktop padding ── */
   @media (min-width: 768px) {
     body { padding: 28px 24px 60px; }
@@ -530,6 +532,7 @@ async function poll() {
     }
     setPill("turnerPill", turner);
     $("turnerTxt").textContent = turner ? "TURNING" : "IDLE";
+
     // Always sync turner settings from ESP32 unless user is editing them
     syncInput("turnsPerDay", d.turnsPerDay);
     syncInput("turnDur", d.turnDurationHours);
