@@ -363,19 +363,46 @@
       <h2>Full History</h2>
       <button class="modal-close" onclick="closeHistory()">✕</button>
     </div>
-    <div class="modal-stats">
-      <div class="mstat"><div class="mstat-lbl">Total</div><div class="mstat-val" id="mTotal">—</div></div>
-      <div class="mstat"><div class="mstat-lbl">First entry</div><div class="mstat-val" id="mFirst">—</div></div>
-      <div class="mstat"><div class="mstat-lbl">Last entry</div><div class="mstat-val" id="mLast">—</div></div>
-      <div class="mstat"><div class="mstat-lbl">Avg temp</div><div class="mstat-val" id="mAvgTemp" style="color:var(--accent)">—</div></div>
-      <div class="mstat"><div class="mstat-lbl">Avg humidity</div><div class="mstat-val" id="mAvgHum" style="color:var(--blue)">—</div></div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button id="tabSensorBtn" onclick="switchTab('sensor')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--accent);background:rgba(245,166,35,0.15);color:var(--accent);font-family:monospace;font-size:12px;cursor:pointer;">Sensor readings</button>
+      <button id="tabTurnerBtn" onclick="switchTab('turner')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:monospace;font-size:12px;cursor:pointer;">Turner events</button>
     </div>
-    <div class="tbl-wrap">
-      <table class="log-table" style="width:100%">
-        <thead><tr><th>#</th><th>Time</th><th>Temp °C</th><th>Humidity %</th></tr></thead>
-        <tbody id="mBody"></tbody>
-      </table>
+
+    <!-- Sensor tab -->
+    <div id="tabSensor">
+      <div class="modal-stats">
+        <div class="mstat"><div class="mstat-lbl">Total</div><div class="mstat-val" id="mTotal">—</div></div>
+        <div class="mstat"><div class="mstat-lbl">First entry</div><div class="mstat-val" id="mFirst">—</div></div>
+        <div class="mstat"><div class="mstat-lbl">Last entry</div><div class="mstat-val" id="mLast">—</div></div>
+        <div class="mstat"><div class="mstat-lbl">Avg temp</div><div class="mstat-val" id="mAvgTemp" style="color:var(--accent)">—</div></div>
+        <div class="mstat"><div class="mstat-lbl">Avg humidity</div><div class="mstat-val" id="mAvgHum" style="color:var(--blue)">—</div></div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="log-table" style="width:100%">
+          <thead><tr><th>#</th><th>Time</th><th>Temp °C</th><th>Humidity %</th></tr></thead>
+          <tbody id="mBody"></tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- Turner events tab -->
+    <div id="tabTurner" style="display:none;">
+      <div class="modal-stats">
+        <div class="mstat"><div class="mstat-lbl">Total events</div><div class="mstat-val" id="eTotal">—</div></div>
+        <div class="mstat"><div class="mstat-lbl">First event</div><div class="mstat-val" id="eFirst">—</div></div>
+        <div class="mstat"><div class="mstat-lbl">Last event</div><div class="mstat-val" id="eLast">—</div></div>
+        <div class="mstat"><div class="mstat-lbl">Total ON events</div><div class="mstat-val" id="eTotalOn" style="color:var(--green)">—</div></div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="log-table" style="width:100%">
+          <thead><tr><th>#</th><th>Time</th><th>State</th><th>Mode</th></tr></thead>
+          <tbody id="eBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -804,34 +831,83 @@ async function loadHistory() {
 }
 
 // ── FULL HISTORY MODAL ────────────────────────────────
+function switchTab(tab) {
+  const isSensor = tab === "sensor";
+  $("tabSensor").style.display = isSensor ? "block" : "none";
+  $("tabTurner").style.display = isSensor ? "none"  : "block";
+  $("tabSensorBtn").style.borderColor  = isSensor ? "var(--accent)" : "var(--border)";
+  $("tabSensorBtn").style.background   = isSensor ? "rgba(245,166,35,0.15)" : "transparent";
+  $("tabSensorBtn").style.color        = isSensor ? "var(--accent)" : "var(--muted)";
+  $("tabTurnerBtn").style.borderColor  = isSensor ? "var(--border)" : "var(--accent)";
+  $("tabTurnerBtn").style.background   = isSensor ? "transparent" : "rgba(245,166,35,0.15)";
+  $("tabTurnerBtn").style.color        = isSensor ? "var(--muted)" : "var(--accent)";
+}
+
 async function openHistory() {
   $("historyModal").classList.add("open");
-  $("mBody").innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);font-family:monospace;font-size:12px">Loading...</td></tr>`;
-  try {
-    const r = await fetch(`${API}/api/history?limit=all`);
-    if (!r.ok) throw new Error("failed");
-    const d = await r.json();
-    if (!d.ok || !d.data.length) {
-      $("mBody").innerHTML = `<tr><td colspan="4" class="no-data">No history yet — first entry in 15 min</td></tr>`;
-      return;
-    }
-    const all = d.data;
-    $("mTotal").textContent    = all.length;
-    $("mFirst").textContent    = fmtTs(all[0].ts);
-    $("mLast").textContent     = fmtTs(all[all.length-1].ts);
-    $("mAvgTemp").textContent  = (all.reduce((s,x) => s+x.temp, 0) / all.length).toFixed(1) + " °C";
-    $("mAvgHum").textContent   = (all.reduce((s,x) => s+x.hum,  0) / all.length).toFixed(1) + " %";
+  switchTab("sensor");
 
-    $("mBody").innerHTML = [...all].reverse().map((d, i) =>
-      `<tr>
-        <td class="td-time">${all.length - i}</td>
-        <td class="td-time">${fmtTs(d.ts)}</td>
-        <td class="td-temp">${d.temp.toFixed(1)}°C</td>
-        <td class="td-hum">${d.hum.toFixed(1)}%</td>
-      </tr>`
-    ).join("");
-  } catch (e) {
-    $("mBody").innerHTML = `<tr><td colspan="4" style="color:var(--red);padding:16px;font-family:monospace;font-size:12px">Error: ${e.message}</td></tr>`;
+  // Loading state
+  $("mBody").innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);font-family:monospace;font-size:12px">Loading...</td></tr>`;
+  $("eBody").innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);font-family:monospace;font-size:12px">Loading...</td></tr>`;
+
+  // Fetch both in parallel
+  try {
+    const [rh, re] = await Promise.all([
+      fetch(`${API}/api/history?limit=all`),
+      fetch(`${API}/api/events?limit=all`)
+    ]);
+
+    // ── Sensor history ──
+    const dh = rh.ok ? await rh.json() : { ok: false, data: [] };
+    if (!dh.ok || !dh.data.length) {
+      $("mBody").innerHTML = `<tr><td colspan="4" class="no-data">No sensor history yet — first entry in 15 min</td></tr>`;
+    } else {
+      const all = dh.data;
+      $("mTotal").textContent   = all.length;
+      $("mFirst").textContent   = fmtTs(all[0].ts);
+      $("mLast").textContent    = fmtTs(all[all.length-1].ts);
+      $("mAvgTemp").textContent = (all.reduce((s,x) => s+x.temp, 0) / all.length).toFixed(1) + " °C";
+      $("mAvgHum").textContent  = (all.reduce((s,x) => s+x.hum,  0) / all.length).toFixed(1) + " %";
+      $("mBody").innerHTML = [...all].reverse().map((d, i) =>
+        `<tr>
+          <td class="td-time">${all.length - i}</td>
+          <td class="td-time">${fmtTs(d.ts)}</td>
+          <td class="td-temp">${d.temp.toFixed(1)}°C</td>
+          <td class="td-hum">${d.hum.toFixed(1)}%</td>
+        </tr>`
+      ).join("");
+    }
+
+    // ── Turner events ──
+    const de = re.ok ? await re.json() : { ok: false, data: [] };
+    if (!de.ok || !de.data.length) {
+      $("eBody").innerHTML = `<tr><td colspan="4" class="no-data">No turner events yet</td></tr>`;
+      $("eTotal").textContent = "0";
+      $("eFirst").textContent = "—";
+      $("eLast").textContent  = "—";
+      $("eTotalOn").textContent = "0";
+    } else {
+      const all = de.data;
+      const onCount = all.filter(e => e.state === "ON").length;
+      $("eTotal").textContent   = all.length;
+      $("eFirst").textContent   = fmtTs(all[0].ts);
+      $("eLast").textContent    = fmtTs(all[all.length-1].ts);
+      $("eTotalOn").textContent = onCount;
+      $("eBody").innerHTML = [...all].reverse().map((e, i) => {
+        const on = e.state === "ON";
+        return `<tr>
+          <td class="td-time">${all.length - i}</td>
+          <td class="td-time">${fmtTs(e.ts)}</td>
+          <td style="color:${on ? "var(--green)" : "var(--muted)"};font-family:monospace;font-size:12px;font-weight:600">${e.state}</td>
+          <td class="td-time">${e.mode || "auto"}</td>
+        </tr>`;
+      }).join("");
+    }
+
+  } catch (err) {
+    $("mBody").innerHTML = `<tr><td colspan="4" style="color:var(--red);padding:16px;font-family:monospace;font-size:12px">Error: ${err.message}</td></tr>`;
+    $("eBody").innerHTML = `<tr><td colspan="4" style="color:var(--red);padding:16px;font-family:monospace;font-size:12px">Error: ${err.message}</td></tr>`;
   }
 }
 
