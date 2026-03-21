@@ -1,11 +1,11 @@
 {
   "rewrites": [
-    { "source": "/api/sync",              "destination": "/api/sync" },
-    { "source": "/api/command",           "destination": "/api/command" },
-    { "source": "/api/history",           "destination": "/api/history" },
-    { "source": "/api/auth",              "destination": "/api/auth" },
-    { "source": "/api/settings",          "destination": "/api/settings" },
-    { "source": "/api/events",            "destination": "/api/events" },
-    { "source": "/(.*)",                  "destination": "/public/index.html" }
+    { "source": "/api/sync",     "destination": "/api/sync" },
+    { "source": "/api/command",  "destination": "/api/command" },
+    { "source": "/api/history",  "destination": "/api/history" },
+    { "source": "/api/auth",     "destination": "/api/auth" },
+    { "source": "/api/settings", "destination": "/api/settings" },
+    { "source": "/api/events",   "destination": "/api/events" },
+    { "source": "/(.*)",         "destination": "/public/index.html" }
   ]
 }
